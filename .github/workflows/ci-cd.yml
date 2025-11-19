@@ -5,58 +5,67 @@ on:
     branches: [ main ]
 
 env:
-  # adjust if you want another tag
   IMAGE_TAG: latest
-  REGION: us-east1
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Cloud SDK (gcloud)
+      - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v1
         with:
           project_id: ${{ secrets.GCP_PROJECT }}
-          install_components: gke-gcloud-auth-plugin, kubectl, beta, alpha
+          install_components: gke-gcloud-auth-plugin, kubectl
 
-      - name: Authenticate to GCP using service account key
-        # we have the JSON key in GCP_SA_KEY secret
+      - name: Authenticate (service account key)
         run: |
-          echo "$GCP_SA_KEY" > "${{ runner.temp }}/gcloud-key.json"
+          echo "${{ secrets.GCP_SA_KEY }}" > "${{ runner.temp }}/gcloud-key.json"
           gcloud auth activate-service-account --key-file="${{ runner.temp }}/gcloud-key.json"
           gcloud config set project "${{ secrets.GCP_PROJECT }}"
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Configure docker for Artifact Registry (us-east1)
+      - name: Configure Docker for Artifact Registry
         run: |
           gcloud auth configure-docker us-east1-docker.pkg.dev --quiet
 
-      - name: Build Docker image
+      - name: Build image
         run: |
           IMAGE="us-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/${{ secrets.AR_REPOSITORY }}/${{ secrets.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
           docker build -t "$IMAGE" .
 
-      - name: Push image to Artifact Registry
+      - name: Push image
         run: |
           docker push "$IMAGE"
 
-      - name: Get GKE credentials
+      - name: Get GKE credentials (try region then zones)
+        env:
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
-          # change region/cluster name to your values
-          gcloud container clusters get-credentials "${{ secrets.GKE_CLUSTER }}" --region "${{ secrets.GCP_REGION }}" --project "${{ secrets.GCP_PROJECT }}"
+          set -e
+          echo "$GCP_SA_KEY" > "${{ runner.temp }}/gcloud-key.json"
+          gcloud auth activate-service-account --key-file="${{ runner.temp }}/gcloud-key.json"
+          gcloud config set project "$GCP_PROJECT"
+          CLUSTER="$GKE_CLUSTER"
+          REGION="$GCP_REGION"
 
-      - name: Deploy (update image) to GKE deployment
+          if gcloud container clusters get-credentials "$CLUSTER" --region "$REGION" --project "$GCP_PROJECT"; then
+            echo "Got credentials using region $REGION"
+          else
+            for z in ${REGION}-a ${REGION}-b ${REGION}-c; do
+              if gcloud container clusters get-credentials "$CLUSTER" --zone "$z" --project "$GCP_PROJECT"; then
+                echo "Got credentials using zone $z"
+                break
+              fi
+            done
+          fi
+
+      - name: Deploy (update image)
         run: |
-          # Replace deployment name and container name if needed
           kubectl set image deployment/devsu-app devsu-container="$IMAGE" --record
-          kubectl rollout status deployment/devsu-app --timeout=2m
-
-      - name: Optional - apply k8s manifest (if you prefer apply instead)
-        if: false
-        run: |
-          kubectl apply -f k8s/
+          kubectl rollout status deployment/devsu-app --timeout=3m
