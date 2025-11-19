@@ -1,142 +1,114 @@
-# Demo Devops NodeJs
+# 🟦 Devsu Backend Challenge – GKE + Docker + CI/CD + HTTPS
 
-This is a simple application to be used in the technical test of DevOps.
+Este repositorio contiene la solución completa al reto técnico solicitado por **Devsu**, desplegando una API Node.js dentro de **Google Kubernetes Engine Autopilot (GKE)**, manejando imágenes con **Artifact Registry**, exponiendo el servicio con **Ingress + HTTPS**, enlazado a un dominio personalizado **(gissepa.space)** y automatizado con un pipeline de **CI/CD usando GitHub Actions**.
 
-## Getting Started
+---
 
-### Prerequisites
+# 🚀 Requerimientos cumplidos
 
-- Node.js 18.15.0
+✔ API funcional con endpoint `/api/users`  
+✔ Dockerfile construido correctamente  
+✔ Despliegue en Google Kubernetes Engine (Autopilot)  
+✔ Servicio expuesto mediante Load Balancer  
+✔ Dominio personalizado funcional: **https://gissepa.space**  
+✔ Certificado SSL administrado automático (ManagedCertificate)  
+✔ Ingress con redirección `/` → `/api/users`  
+✔ CI/CD completo: build → push → deploy  
+✔ Imágenes almacenadas en Artifact Registry  
+✔ Actualización automática del Deployment y rollout sin downtime  
 
-### Installation
+---
 
-Clone this repo.
+# 📡 Endpoints del proyecto
 
-```bash
-git clone https://bitbucket.org/devsu/demo-devops-nodejs.git
-```
+### **API principal**
 
-Install dependencies.
+https://gissepa.space/api/users
 
-```bash
-npm i
-```
 
-### Database
+### **Redirección desde root**
 
-The database is generated as a file in the main path when the project is first run, and its name is `dev.sqlite`.
+https://gissepa.space/
 
-Consider giving access permissions to the file for proper functioning.
+→ Redirige automáticamente a `/api/users`.
 
-## Usage
+---
 
-To run tests you can use this command.
-
-```bash
-npm run test
-```
-
-To run locally the project you can use this command.
+# 📁 Estructura del repositorio
 
 ```bash
-npm run start
-```
+.
+├── server.js
+├── package.json
+├── Dockerfile
+├── k8s/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── ingress.yaml
+│   ├── managed-cert.yaml
+│   ├── redirector.yaml
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml
+└── README.md
 
-Open http://localhost:8000/api/users with your browser to see the result.
+# 🧪 Cómo ejecutar el proyecto localmente
 
-### Features
+npm install
+node server.js
 
-These services can perform,
+http://localhost:8000/api/users
 
-#### Create User
+# 🐳 Ejecutar con Docker
 
-To create a user, the endpoint **/api/users** must be consumed with the following parameters:
+docker build -t devsu-app .
+docker run -p 8000:8000 devsu-app
 
-```bash
-  Method: POST
-```
+#☸️ Despliegue en Google Kubernetes Engine (GKE)
 
-```json
-{
-    "dni": "dni",
-    "name": "name"
-}
-```
+gcloud container clusters create-auto devsu-autopilot-east2 \
+  --region us-east1
 
-If the response is successful, the service will return an HTTP Status 200 and a message with the following structure:
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
 
-```json
-{
-    "id": 1,
-    "dni": "dni",
-    "name": "name"
-}
-```
+kubectl get pods
 
-If the response is unsuccessful, we will receive status 400 and the following message:
+#🌐 Dominio personalizado
 
-```json
-{
-    "error": "error"
-}
-```
+Dominio usado:
 
-#### Get Users
+https://gissepa.space
 
-To get all users, the endpoint **/api/users** must be consumed with the following parameters:
+DNS configurado:
+Tipo	Nombre	Valor	TTL
+A	@	136.110.239.41	Auto
+A	www	136.110.239.41	Auto
 
-```bash
-  Method: GET
-```
+Esa IP corresponde al Load Balancer del Ingress.
 
-If the response is successful, the service will return an HTTP Status 200 and a message with the following structure:
+#🔐 Certificado HTTPS (Google ManagedCertificate)
 
-```json
-[
-    {
-        "id": 1,
-        "dni": "dni",
-        "name": "name"
-    }
-]
-```
+kubectl apply -f k8s/managed-cert.yaml
+kubectl describe managedcertificate devsu-managed-cert
 
-#### Get User
+#↪️ Redirección "/" → "/api/users"
 
-To get an user, the endpoint **/api/users/<id>** must be consumed with the following parameters:
+k8s/redirector.yaml
 
-```bash
-  Method: GET
-```
+#🤖 CI/CD con GitHub Actions
 
-If the response is successful, the service will return an HTTP Status 200 and a message with the following structure:
+.github/workflows/ci-cd.yml
 
-```json
-{
-    "id": 1,
-    "dni": "dni",
-    "name": "name"
-}
-```
+# 📦 Artefactos finales del proyecto
+API:
 
-If the user id does not exist, we will receive status 404 and the following message:
+🔗 https://gissepa.space/api/users
 
-```json
-{
-    "error": "User not found: <id>"
-}
-```
+Homepage (redirige):
 
-If the response is unsuccessful, we will receive status 400 and the following message:
+🔗 https://gissepa.space/
 
-```json
-{
-    "errors": [
-        "error"
-    ]
-}
-```
+Repositorio:
 
-## License
-
-Copyright © 2023 Devsu. All rights reserved.
+🔗 https://github.com/Gissela25/Devsu-Test/tree/main
