@@ -1,0 +1,8 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: devsu-managed-cert
+spec:
+  domains:
+    - "gissepa.space"
+    - "www.gissepa.space"
