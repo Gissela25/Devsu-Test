@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devsu-app
+  labels:
+    app: devsu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devsu
+  template:
+    metadata:
+      labels:
+        app: devsu
+    spec:
+      containers:
+        - name: devsu-container
+          image: us-east1-docker.pkg.dev/nomadic-rite-478602-t8/devsu-docker-repo/devsu-nodejs-demo:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "150m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /api/users
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/users
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
