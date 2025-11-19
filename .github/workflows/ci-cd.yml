@@ -1,4 +1,4 @@
-name: CI/CD — build, push to Artifact Registry & deploy to GKE
+name: CI/CD — build → push to Artifact Registry → deploy to GKE
 
 on:
   push:
@@ -9,34 +9,43 @@ env:
 
 jobs:
   build-and-deploy:
+    name: Build, publish and deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up gcloud
+      - name: Set up Google Cloud SDK (install gcloud, kubectl)
         uses: google-github-actions/setup-gcloud@v1
         with:
           project_id: ${{ secrets.GCP_PROJECT }}
-          install_components: gke-gcloud-auth-plugin, kubectl
+          install_components: gke-gcloud-auth-plugin,kubectl
+          export_default_credentials: false
 
-      - name: Authenticate (service account key)
+      - name: Authenticate (service account key)  # <<<<<< USE PRINTF HERE
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
         run: |
-          echo "${{ secrets.GCP_SA_KEY }}" > "${{ runner.temp }}/gcloud-key.json"
+          # write the SA json safely (preserve newlines & quotes)
+          printf '%s' "$GCP_SA_KEY" > "${{ runner.temp }}/gcloud-key.json"
+          # activate the service account
           gcloud auth activate-service-account --key-file="${{ runner.temp }}/gcloud-key.json"
-          gcloud config set project "${{ secrets.GCP_PROJECT }}"
+          # set project
+          gcloud config set project "$GCP_PROJECT"
 
-      - name: Configure Docker for Artifact Registry
+      - name: Configure docker to push to Artifact Registry (us-east1)
         run: |
           gcloud auth configure-docker us-east1-docker.pkg.dev --quiet
 
-      - name: Build image
+      - name: Build Docker image
         run: |
           IMAGE="us-east1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/${{ secrets.AR_REPOSITORY }}/${{ secrets.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
           echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+          echo "Building $IMAGE"
           docker build -t "$IMAGE" .
 
-      - name: Push image
+      - name: Push image to Artifact Registry
         run: |
           docker push "$IMAGE"
 
@@ -48,15 +57,19 @@ jobs:
           GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
           set -e
-          echo "$GCP_SA_KEY" > "${{ runner.temp }}/gcloud-key.json"
+          # ensure auth for this step too (runner temp is ephemeral)
+          printf '%s' "$GCP_SA_KEY" > "${{ runner.temp }}/gcloud-key.json"
           gcloud auth activate-service-account --key-file="${{ runner.temp }}/gcloud-key.json"
           gcloud config set project "$GCP_PROJECT"
+
           CLUSTER="$GKE_CLUSTER"
           REGION="$GCP_REGION"
 
+          echo "Trying regional get-credentials for cluster=$CLUSTER region=$REGION project=$GCP_PROJECT"
           if gcloud container clusters get-credentials "$CLUSTER" --region "$REGION" --project "$GCP_PROJECT"; then
             echo "Got credentials using region $REGION"
           else
+            echo "Regional attempt failed — trying zones ${REGION}-a/b/c..."
             for z in ${REGION}-a ${REGION}-b ${REGION}-c; do
               if gcloud container clusters get-credentials "$CLUSTER" --zone "$z" --project "$GCP_PROJECT"; then
                 echo "Got credentials using zone $z"
@@ -65,7 +78,11 @@ jobs:
             done
           fi
 
-      - name: Deploy (update image)
+      - name: Deploy: update deployment image and rollout
         run: |
-          kubectl set image deployment/devsu-app devsu-container="$IMAGE" --record
-          kubectl rollout status deployment/devsu-app --timeout=3m
+          # adjust deployment name and container name if your k8s manifest differs
+          DEPLOYMENT_NAME="devsu-app"
+          CONTAINER_NAME="devsu-container"
+          echo "Updating deployment/$DEPLOYMENT_NAME container $CONTAINER_NAME -> $IMAGE"
+          kubectl set image deployment/${DEPLOYMENT_NAME} ${CONTAINER_NAME}="$IMAGE" --record
+          kubectl rollout status deployment/${DEPLOYMENT_NAME} --timeout=3m
